@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Automation Flow Manager — Playwright Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 p-2 rounded-lg text-white font-bold text-xl">QA</div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide">Automation Flow Studio</h1>
+                <p class="text-xs text-slate-400">Playwright Visual Regression · UI-only Prototype</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3 bg-slate-900 p-2 rounded-lg border border-slate-700 w-1/2">
+            <span class="text-xs font-semibold text-blue-400 uppercase tracking-wider px-2">Target URL:</span>
+            <input id="targetUrl" type="url" value="https://staging.env.local/dashboard" class="bg-transparent text-sm text-slate-200 focus:outline-none w-full font-mono">
+            <button onclick="triggerQuickRun()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-4 py-1.5 rounded transition-all shadow flex items-center space-x-1 whitespace-nowrap">
+                <span>⚡ Quick Run & Compare</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+
+        <aside class="w-96 bg-slate-800/50 border-r border-slate-700 p-4 flex flex-col space-y-6 overflow-y-auto">
+
+            <div>
+                <button onclick="openModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 px-4 rounded-lg shadow transition-all flex items-center justify-center space-x-2 text-sm">
+                    <span>+ Create New Test Case</span>
+                </button>
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Test Repository Flow</h2>
+                    <span class="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full whitespace-nowrap" id="testCaseCount">0 Test Cases · 0 Baselines</span>
+                </div>
+
+                <div id="treeContainer" class="space-y-0.5 text-sm text-slate-300">
+                    </div>
+            </div>
+
+            <hr class="border-slate-700">
+
+            <div>
+                <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Legend</h2>
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-1.5 text-[11px] text-slate-400">
+                    <div><span class="mr-1">📦</span> Batch — top-level Playwright suite folder</div>
+                    <div><span class="mr-1">📁</span> Module — feature / page grouping</div>
+                    <div><span class="mr-1 text-blue-400">🧪</span> Testcases — your <span class="font-mono text-slate-300">.spec</span> definitions</div>
+                    <div><span class="mr-1 text-amber-400">🖼️</span> Baselines — expected screenshots, auto-created on first run</div>
+                    <div><span class="text-emerald-500 mr-1">✓</span> test case already has a captured baseline</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 bg-slate-900 p-6 overflow-y-auto flex flex-col space-y-6">
+
+            <div class="bg-blue-950/40 border border-blue-800/60 rounded-xl p-4 flex items-start space-x-3">
+                <div class="text-blue-400 mt-0.5">ℹ️</div>
+                <div class="text-xs text-slate-300 leading-relaxed">
+                    <span class="font-bold text-blue-300">How this maps to your Playwright project:</span>
+                    Each <span class="font-mono text-slate-200">Batch</span> is a top-level suite folder (e.g. <span class="font-mono text-amber-400">tests/&lt;batch&gt;/</span>), and every <span class="font-mono text-slate-200">Module</span> inside it holds two sub-folders — <span class="font-mono text-blue-300">testcases/</span> for your <span class="font-mono text-slate-200">.spec.ts</span> files, and <span class="font-mono text-amber-400">baselines/</span> for the reference screenshots that Playwright's <span class="font-mono text-slate-200">toHaveScreenshot()</span> compares against. Saving a test case here scaffolds it into <span class="font-mono text-blue-300">testcases/</span> under the Batch/Module you choose. The <b class="text-slate-200">first</b> Quick Run for that test case captures and stores its baseline at <span class="font-mono text-amber-400">baselines/&lt;jsonId&gt;.png</span>; every run after that compares the live capture against it.
+                    <br><br>
+                    <span class="font-bold text-amber-300">⚠ Frontend prototype only:</span> nothing here is sent to a server or saved to disk/browser storage — refreshing the page resets the demo data shown below.
+                </div>
+            </div>
+
+            <div id="sandboxPanel" class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl hidden">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <p id="sandboxBreadcrumb" class="text-[10px] text-slate-500 font-mono mb-1">—</p>
+                        <div class="flex items-center gap-2">
+                            <span id="sandboxBadge" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700">In Progress</span>
+                            <span id="sandboxBaselineBadge" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600">🆕 No Baseline Yet</span>
+                        </div>
+                        <h3 id="sandboxTitle" class="text-xl font-bold mt-1 text-white">Select a test case</h3>
+                    </div>
+                    <div class="flex space-x-2 font-mono text-xs text-slate-400">
+                        <span>ID: <span id="sandboxJsonId" class="text-slate-200">N/A</span></span>
+                        <span>|</span>
+                        <span>Priority: <span id="sandboxPriority" class="text-slate-200">N/A</span></span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6 mt-6">
+                    <div class="bg-slate-900/80 border border-slate-700 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-semibold text-amber-400 flex items-center gap-1">🖼️ Expected Baseline Image</span>
+                            <span class="text-[10px] text-slate-500 font-mono">baselines/</span>
+                        </div>
+                        <div id="baselineAssetBox" class="h-48 bg-slate-950 rounded flex items-center justify-center border border-dashed border-slate-800">
+                            <p class="text-xs text-slate-500 text-center font-mono">[Select a test case]</p>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/80 border border-slate-700 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-semibold text-teal-400 flex items-center gap-1">📸 Latest Live Screen Capture</span>
+                            <span id="liveTimestamp" class="text-[10px] text-slate-500 font-mono">No Execution Run</span>
+                        </div>
+                        <div id="liveCaptureContainer" class="h-48 bg-slate-950 rounded flex items-center justify-center border border-dashed border-slate-800 transition-all duration-300">
+                            <p id="liveCapturePlaceholder" class="text-xs text-slate-500 font-mono">[Awaiting Quick Run Event]</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="createModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden transform transition-all max-h-[90vh] overflow-y-auto">
+
+            <div class="px-6 py-4 bg-slate-750 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-800 z-10">
+                <h3 class="text-base font-bold text-white">Configure New Test Case Parameters</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+            </div>
+
+            <form id="testCaseForm" onsubmit="handleFormSubmit(event)" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Test Case Name *</label>
+                        <input type="text" id="formName" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Created Date</label>
+                        <input type="date" id="formDate" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Priority</label>
+                    <select id="formPriority" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-blue-500 text-slate-300">
+                        <option value="High">High</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Enhancement Notes</label>
+                    <textarea id="formEnhancement" rows="2" placeholder="Describe code additions or visual tweaks..." class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+                </div>
+
+                <hr class="border-slate-700 my-2">
+
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs font-bold text-blue-400 uppercase tracking-wider">Batch / Module Placement</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="toggleNewFolder" onchange="toggleFolderInputMode()" class="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                            <label for="toggleNewFolder" class="text-xs text-slate-300 cursor-pointer">Or create a new folder pathway</label>
+                        </div>
+                    </div>
+
+                    <div id="existingFolderContainer" class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Batch</label>
+                            <select id="selectBatch" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs focus:outline-none focus:border-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Module</label>
+                            <select id="selectModule" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs focus:outline-none focus:border-blue-500"></select>
+                        </div>
+                    </div>
+
+                    <div id="newFolderContainer" class="grid grid-cols-2 gap-3 hidden">
+                        <div>
+                            <label class="block text-[10px] font-semibold text-amber-400 uppercase mb-1">New Batch Name *</label>
+                            <input type="text" id="newBatch" placeholder="e.g., Batch 3" class="w-full bg-slate-900 border border-amber-700/50 rounded p-1.5 text-xs focus:outline-none focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-amber-400 uppercase mb-1">New Module Name *</label>
+                            <input type="text" id="newModule" placeholder="e.g., Module 3 - Profile" class="w-full bg-slate-900 border border-amber-700/50 rounded p-1.5 text-xs focus:outline-none focus:border-amber-500">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500">Test cases are placed under <span class="font-mono text-blue-300">testcases/</span> inside this Batch/Module. Its baseline appears under <span class="font-mono text-amber-300">baselines/</span> automatically after the first Quick Run.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Status</label>
+                    <div class="flex space-x-4 mt-1">
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer">
+                            <input type="radio" name="status" value="inprogress" checked class="text-blue-600 bg-slate-900 border-slate-700">
+                            <span>In Progress</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer">
+                            <input type="radio" name="status" value="done" class="text-blue-600 bg-slate-900 border-slate-700">
+                            <span>Done</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end space-x-3 border-t border-slate-700">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded transition-all">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded transition-all shadow-md">Save Test Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // DATA MODEL (in-memory only — nothing persists, no backend, no storage APIs)
+        //
+        // Shape:  Batch -> Module -> { testcases: [...], baselines: [...] }
+        //
+        // This mirrors the Playwright folder convention this UI is scaffolding for:
+        //   tests/<batch>/<module>/testcases/<jsonId>.spec.ts
+        //   tests/<batch>/<module>/baselines/<jsonId>.png
+        //
+        // A "baseline" entry is created the first time Quick Run executes for a
+        // given test case, and is re-stamped (capturedAt updated) on later runs —
+        // exactly like Playwright's toHaveScreenshot() behavior with --update-snapshots.
+        // ============================================================================
+        let repositoryData = {
+            "Batch 1": {
+                "Module 1 - Authentication": {
+                    testcases: [
+                        { id: "tc-01", name: "Standard Login Verification", date: "2026-06-15", priority: "High", jsonId: "json_auth_01", enhancement: "Added dark mode visual assertion point.", status: "done", batch: "Batch 1", module: "Module 1 - Authentication", hasBaseline: true },
+                        { id: "tc-02", name: "OAuth Callback Flow", date: "2026-06-16", priority: "High", jsonId: "json_auth_02", enhancement: "Token assertion validation checks.", status: "inprogress", batch: "Batch 1", module: "Module 1 - Authentication", hasBaseline: false }
+                    ],
+                    baselines: [
+                        { jsonId: "json_auth_01", name: "Standard Login Verification — Baseline", linkedTestCaseId: "tc-01", capturedAt: "2026-06-15, 10:42:18 AM" }
+                    ]
+                },
+                "Module 2 - Checkout": {
+                    testcases: [
+                        { id: "tc-03", name: "Stripe API Handshake", date: "2026-06-18", priority: "Medium", jsonId: "json_pay_09", enhancement: "None", status: "inprogress", batch: "Batch 1", module: "Module 2 - Checkout", hasBaseline: false }
+                    ],
+                    baselines: []
+                }
+            },
+            "Batch 2": {
+                "Module 1 - Landing Page": {
+                    testcases: [
+                        { id: "tc-04", name: "Hero Image Scaling Check", date: "2026-06-20", priority: "Low", jsonId: "json_ui_hero", enhancement: "Ensured correct proportional layout scaling", status: "done", batch: "Batch 2", module: "Module 1 - Landing Page", hasBaseline: true }
+                    ],
+                    baselines: [
+                        { jsonId: "json_ui_hero", name: "Hero Image Scaling Check — Baseline", linkedTestCaseId: "tc-04", capturedAt: "2026-06-20, 03:15:02 PM" }
+                    ]
+                }
+            }
+        };
+
+        let selectedTestCase = null;
+        let collapsedNodes = new Set(); // keys of collapsed tree nodes (everything expanded by default)
+
+        // Initialize UI view engine upon DOM loading
+        document.addEventListener("DOMContentLoaded", () => {
+            refreshTreeData();
+            populatePlacementDropdowns();
+            document.getElementById('formDate').value = new Date().toISOString().split('T')[0];
+        });
+
+        function toggleNode(key) {
+            if (collapsedNodes.has(key)) collapsedNodes.delete(key); else collapsedNodes.add(key);
+            refreshTreeData();
+        }
+
+        // Auto-generates a JSON ID (used internally to key baseline assets) from the
+        // test case name, since the field is no longer collected via the form.
+        function generateJsonId(name) {
+            const slug = (name || "case")
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "")
+                .slice(0, 24) || "case";
+            return `json_${slug}_${Date.now().toString().slice(-4)}`;
+        }
+
+        // Generates UI Elements into HTML dynamically based on repository data
+        function refreshTreeData() {
+            const container = document.getElementById("treeContainer");
+            container.innerHTML = "";
+            let testCaseTotal = 0;
+            let baselineTotal = 0;
+
+            for (const batchName in repositoryData) {
+                const batchKey = `b:${batchName}`;
+                const batchCollapsed = collapsedNodes.has(batchKey);
+
+                const batchEl = document.createElement("div");
+                batchEl.className = "pl-1 py-1 font-bold text-slate-200 flex items-center space-x-1.5 border-l-2 border-blue-500/30 ml-1 mt-2 cursor-pointer select-none hover:text-white";
+                batchEl.innerHTML = `<span class="text-[9px] text-slate-500 w-3 inline-block">${batchCollapsed ? '▶' : '▼'}</span><span>📦</span><span class="tracking-wide">${batchName}</span>`;
+                batchEl.onclick = () => toggleNode(batchKey);
+                container.appendChild(batchEl);
+
+                if (batchCollapsed) continue;
+
+                for (const moduleName in repositoryData[batchName]) {
+                    const moduleKey = `m:${batchName}::${moduleName}`;
+                    const moduleCollapsed = collapsedNodes.has(moduleKey);
+                    const moduleData = repositoryData[batchName][moduleName];
+
+                    const moduleEl = document.createElement("div");
+                    moduleEl.className = "pl-5 py-0.5 text-xs text-slate-300 font-semibold flex items-center space-x-1.5 border-l border-slate-700 ml-3 cursor-pointer select-none hover:text-white";
+                    moduleEl.innerHTML = `<span class="text-[9px] text-slate-500 w-3 inline-block">${moduleCollapsed ? '▶' : '▼'}</span><span>📁</span><span class="italic text-slate-300">${moduleName}</span>`;
+                    moduleEl.onclick = () => toggleNode(moduleKey);
+                    container.appendChild(moduleEl);
+
+                    if (moduleCollapsed) continue;
+
+                    // --- Testcases folder ---
+                    const tcfKey = `tcf:${batchName}::${moduleName}`;
+                    const tcfCollapsed = collapsedNodes.has(tcfKey);
+                    const tcfEl = document.createElement("div");
+                    tcfEl.className = "pl-9 py-0.5 text-[11px] text-blue-300 font-medium flex items-center space-x-1.5 border-l border-slate-700 ml-6 cursor-pointer select-none hover:text-blue-200";
+                    tcfEl.innerHTML = `<span class="text-[9px] text-slate-500 w-3 inline-block">${tcfCollapsed ? '▶' : '▼'}</span><span>🧪</span><span>Testcases</span><span class="text-[10px] text-slate-500">(${moduleData.testcases.length})</span>`;
+                    tcfEl.onclick = () => toggleNode(tcfKey);
+                    container.appendChild(tcfEl);
+
+                    if (!tcfCollapsed) {
+                        moduleData.testcases.forEach(tc => {
+                            testCaseTotal++;
+                            const caseEl = document.createElement("div");
+                            const statusColor = tc.status === 'done' ? 'text-emerald-400' : 'text-amber-400';
+                            const isActive = selectedTestCase && selectedTestCase.id === tc.id;
+                            const activeHighlight = isActive ? 'bg-slate-700/60 border border-slate-600 text-white' : 'hover:bg-slate-800 text-slate-400';
+
+                            caseEl.className = `pl-12 pr-2 py-1 text-xs rounded cursor-pointer flex justify-between items-center ml-9 transition-all ${activeHighlight}`;
+                            caseEl.onclick = () => selectTestCaseItem(tc);
+                            caseEl.innerHTML = `
+                                <div class="flex items-center space-x-1.5 truncate">
+                                    <span class="${statusColor}">●</span>
+                                    <span class="truncate">${tc.name}</span>
+                                    ${tc.hasBaseline ? '<span title="Baseline captured" class="text-emerald-500 text-[10px]">✓</span>' : ''}
+                                </div>
+                                <span class="text-[10px] opacity-60 font-mono text-slate-400">${tc.jsonId}</span>
+                            `;
+                            container.appendChild(caseEl);
+                        });
+                        if (moduleData.testcases.length === 0) {
+                            const emptyEl = document.createElement("div");
+                            emptyEl.className = "pl-12 ml-9 py-1 text-[10px] text-slate-600 italic";
+                            emptyEl.innerText = "No test cases yet";
+                            container.appendChild(emptyEl);
+                        }
+                    }
+
+                    // --- Baselines folder ---
+                    const blfKey = `blf:${batchName}::${moduleName}`;
+                    const blfCollapsed = collapsedNodes.has(blfKey);
+                    const blfEl = document.createElement("div");
+                    blfEl.className = "pl-9 py-0.5 text-[11px] text-amber-300 font-medium flex items-center space-x-1.5 border-l border-slate-700 ml-6 cursor-pointer select-none hover:text-amber-200";
+                    blfEl.innerHTML = `<span class="text-[9px] text-slate-500 w-3 inline-block">${blfCollapsed ? '▶' : '▼'}</span><span>🖼️</span><span>Baselines</span><span class="text-[10px] text-slate-500">(${moduleData.baselines.length})</span>`;
+                    blfEl.onclick = () => toggleNode(blfKey);
+                    container.appendChild(blfEl);
+
+                    if (!blfCollapsed) {
+                        moduleData.baselines.forEach(bl => {
+                            baselineTotal++;
+                            const blEl = document.createElement("div");
+                            blEl.className = "pl-12 pr-2 py-1 text-xs rounded ml-9 text-slate-500 flex justify-between items-center";
+                            blEl.innerHTML = `
+                                <div class="flex items-center space-x-1.5 truncate">
+                                    <span class="text-amber-500">▣</span>
+                                    <span class="truncate font-mono">${bl.jsonId}.png</span>
+                                </div>
+                                <span class="text-[9px] opacity-60 whitespace-nowrap">${bl.capturedAt}</span>
+                            `;
+                            container.appendChild(blEl);
+                        });
+                        if (moduleData.baselines.length === 0) {
+                            const emptyEl = document.createElement("div");
+                            emptyEl.className = "pl-12 ml-9 py-1 text-[10px] text-slate-600 italic";
+                            emptyEl.innerText = "Empty — created automatically on first Quick Run";
+                            container.appendChild(emptyEl);
+                        }
+                    }
+                }
+            }
+            document.getElementById("testCaseCount").innerText = `${testCaseTotal} Test Cases · ${baselineTotal} Baselines`;
+        }
+
+        // Dropdown Synchronizer Helper for target Batch/Module placement (existing-folder mode)
+        function populatePlacementDropdowns() {
+            const sBatch = document.getElementById("selectBatch");
+            const sModule = document.getElementById("selectModule");
+            sBatch.innerHTML = ""; sModule.innerHTML = "";
+
+            const batches = Object.keys(repositoryData);
+            batches.forEach(batch => sBatch.options.add(new Option(batch, batch)));
+
+            const refreshModuleOptions = (batchName) => {
+                sModule.innerHTML = "";
+                Object.keys(repositoryData[batchName] || {}).forEach(mod => {
+                    sModule.options.add(new Option(mod, mod));
+                });
+            };
+
+            if (batches.length) refreshModuleOptions(batches[0]);
+
+            sBatch.onchange = () => refreshModuleOptions(sBatch.value);
+        }
+
+        // View Detail Item Loader Actions
+        function selectTestCaseItem(tc) {
+            selectedTestCase = tc;
+            refreshTreeData(); // re-highlights row adjustments
+
+            const panel = document.getElementById("sandboxPanel");
+            panel.classList.remove("hidden");
+
+            document.getElementById("sandboxBreadcrumb").innerText = `${tc.batch} › ${tc.module} › Testcases › ${tc.name}`;
+            document.getElementById("sandboxTitle").innerText = tc.name;
+            document.getElementById("sandboxJsonId").innerText = tc.jsonId;
+            document.getElementById("sandboxPriority").innerText = tc.priority;
+
+            const badge = document.getElementById("sandboxBadge");
+            badge.innerText = tc.status === 'done' ? 'Status: Done' : 'Status: In Progress';
+            if (tc.status === 'done') {
+                badge.className = "text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700";
+            } else {
+                badge.className = "text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-700";
+            }
+
+            updateSandboxBaselineBadge();
+
+            // Reset Quick run mockup display states
+            document.getElementById("liveTimestamp").innerText = "No Execution Run";
+            document.getElementById("liveCaptureContainer").className = "h-48 bg-slate-950 rounded flex items-center justify-center border border-dashed border-slate-800";
+            document.getElementById("liveCaptureContainer").innerHTML = `<p id="liveCapturePlaceholder" class="text-xs text-slate-500 font-mono">[Awaiting Quick Run Event]</p>`;
+
+            // Reflect baseline asset presence
+            const baselineBox = document.getElementById("baselineAssetBox");
+            if (tc.hasBaseline) {
+                baselineBox.innerHTML = `<p class="text-xs text-slate-400 text-center font-mono">[Baseline Asset<br>baselines/${tc.jsonId}.png]</p>`;
+            } else {
+                baselineBox.innerHTML = `<p class="text-xs text-slate-600 text-center font-mono">[No baseline yet<br>Run Quick Run to create one]</p>`;
+            }
+        }
+
+        function updateSandboxBaselineBadge() {
+            const el = document.getElementById("sandboxBaselineBadge");
+            if (!selectedTestCase) return;
+            if (selectedTestCase.hasBaseline) {
+                el.innerText = "✅ Baseline Captured";
+                el.className = "text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700";
+            } else {
+                el.innerText = "🆕 No Baseline Yet";
+                el.className = "text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600";
+            }
+        }
+
+        // Modal visibility toggle utils
+        function openModal() { document.getElementById("createModal").classList.remove("hidden"); }
+        function closeModal() { document.getElementById("createModal").classList.add("hidden"); document.getElementById("testCaseForm").reset(); document.getElementById("toggleNewFolder").checked = false; toggleFolderInputMode(); }
+
+        function toggleFolderInputMode() {
+            const checked = document.getElementById("toggleNewFolder").checked;
+            const existCont = document.getElementById("existingFolderContainer");
+            const newCont = document.getElementById("newFolderContainer");
+
+            if (checked) {
+                existCont.classList.add("hidden");
+                newCont.classList.remove("hidden");
+            } else {
+                existCont.classList.remove("hidden");
+                newCont.classList.add("hidden");
+            }
+        }
+
+        // Form processing workflow
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            const isNewPath = document.getElementById("toggleNewFolder").checked;
+            let batch, module;
+
+            if (isNewPath) {
+                batch = document.getElementById("newBatch").value.trim();
+                module = document.getElementById("newModule").value.trim();
+
+                if (!batch || !module) {
+                    alert("New Batch Name and New Module Name are required when creating a new folder pathway.");
+                    return;
+                }
+
+                if (!repositoryData[batch]) repositoryData[batch] = {};
+                if (!repositoryData[batch][module]) repositoryData[batch][module] = { testcases: [], baselines: [] };
+            } else {
+                batch = document.getElementById("selectBatch").value;
+                module = document.getElementById("selectModule").value;
+
+                if (!batch || !module) {
+                    alert("Please select a Batch and Module, or switch to creating a new folder pathway.");
+                    return;
+                }
+            }
+
+            const caseName = document.getElementById("formName").value.trim();
+
+            const newCaseObj = {
+                id: "tc-" + Date.now().toString().slice(-6),
+                name: caseName,
+                date: document.getElementById("formDate").value || new Date().toISOString().split('T')[0],
+                priority: document.getElementById("formPriority").value,
+                jsonId: generateJsonId(caseName),
+                enhancement: document.getElementById("formEnhancement").value.trim() || "None",
+                status: document.querySelector('input[name="status"]:checked').value,
+                batch: batch,
+                module: module,
+                hasBaseline: false
+            };
+
+            // Inject case item into target testcases/ array of the chosen Batch/Module
+            repositoryData[batch][module].testcases.push(newCaseObj);
+
+            // Housekeeping configurations
+            closeModal();
+            refreshTreeData();
+            populatePlacementDropdowns();
+
+            // Automatically show detail panel of newly added entity item
+            selectTestCaseItem(newCaseObj);
+        }
+
+        // Mock Action: Simulates the Playwright automation execution runner pipeline,
+        // capturing a screenshot and writing/updating the baseline for the active test case.
+        function triggerQuickRun() {
+            if (!selectedTestCase) {
+                alert("Please select an active test case node from the left tree first before invoking the runner pipeline workflow.");
+                return;
+            }
+
+            const activeUrl = document.getElementById("targetUrl").value;
+            const container = document.getElementById("liveCaptureContainer");
+
+            container.innerHTML = `<div class="text-xs text-blue-400 animate-pulse font-mono flex flex-col items-center gap-2"><span>🔄 Instantiating Playwright Context Headless...</span><span class="text-[10px] text-slate-500">${activeUrl}</span></div>`;
+
+            setTimeout(() => {
+                const now = new Date();
+                document.getElementById("liveTimestamp").innerText = `Captured at: ${now.toLocaleTimeString()}`;
+
+                const moduleData = repositoryData[selectedTestCase.batch][selectedTestCase.module];
+                let baseline = moduleData.baselines.find(b => b.jsonId === selectedTestCase.jsonId);
+                const isFirstCapture = !baseline;
+
+                if (!baseline) {
+                    baseline = {
+                        jsonId: selectedTestCase.jsonId,
+                        name: selectedTestCase.name + " — Baseline",
+                        linkedTestCaseId: selectedTestCase.id,
+                        capturedAt: now.toLocaleString()
+                    };
+                    moduleData.baselines.push(baseline);
+                } else {
+                    baseline.capturedAt = now.toLocaleString();
+                }
+                selectedTestCase.hasBaseline = true;
+
+                // Emulate a successful visual testing outcome match frame graphic
+                container.className = "h-48 bg-emerald-950/40 rounded flex flex-col items-center justify-center border border-emerald-500 transition-all text-center p-4";
+                container.innerHTML = `
+                    <span class="text-2xl mb-1">✅</span>
+                    <span class="text-xs font-bold text-emerald-400 font-mono">${isFirstCapture ? 'Baseline Created' : 'Assertion Pass: 100% Match Matrix'}</span>
+                    <p class="text-[10px] text-slate-400 mt-1">Live buffer snapshot ${isFirstCapture ? 'saved as new baseline at' : 'verified against reference baseline at'} <b class="font-mono text-amber-400">baselines/${selectedTestCase.jsonId}.png</b></p>
+                `;
+
+                refreshTreeData();
+                updateSandboxBaselineBadge();
+                document.getElementById("baselineAssetBox").innerHTML = `<p class="text-xs text-slate-400 text-center font-mono">[Baseline Asset<br>baselines/${selectedTestCase.jsonId}.png]</p>`;
+            }, 1200);
+        }
+    </script>
+</body>
+</html>

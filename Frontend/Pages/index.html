@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playwright Regression Runner</title>
+  <link rel="stylesheet" href="../CSS/index.css">
+</head>
+<body>
+
+<!-- ── GLOBAL PROGRESS BAR ── -->
+<div id="global-progress"></div>
+
+<!-- ── HEADER ── -->
+<header class="app-header">
+  <div class="app-logo">
+    <div class="logo-mark">PW</div>
+    Playwright Regression Runner
+  </div>
+  <span class="header-meta" id="header-meta">5 Batches &middot; UI Prototype</span>
+</header>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════
+     VIEW 1 — HOME
+══════════════════════════════════════════ -->
+<div class="view active" id="home-view">
+  <div class="page-wrap">
+
+    <div class="page-header">
+      <div>
+        <div class="page-title">Regression Suites</div>
+        <div class="page-subtitle">Run individual batches or trigger all batches at once on any URL</div>
+      </div>
+    </div>
+
+    <!-- ── RUN ALL BATCHES BAR (NEW) ── -->
+    <div class="run-all-bar">
+      <div class="run-all-bar-left">
+        <div class="run-all-title">&#128640; Run All Batches</div>
+        <div class="run-all-desc">Set a URL once and execute all 5 batches — generates a consolidated report</div>
+      </div>
+      <div class="run-all-controls">
+        <select class="env-dropdown" id="global-env-dropdown" onchange="syncGlobalUrl()">
+          <option value="https://staging.myapp.com">Staging</option>
+          <option value="https://qa.myapp.com">QA</option>
+          <option value="https://preprod.myapp.com">Pre-prod</option>
+          <option value="custom">Custom...</option>
+        </select>
+        <input class="url-input" id="global-url-input" type="url" value="https://staging.myapp.com" placeholder="https://...">
+        <button class="btn-run-all" id="run-all-btn" onclick="triggerRunAll()">&#9654; Run All Batches</button>
+      </div>
+    </div>
+
+    <!-- ── RUN ALL PROGRESS PANEL (shown during run) ── -->
+    <div class="run-all-progress" id="run-all-progress" style="display:none">
+      <div class="run-all-progress-header">
+        <span>&#9654; Running All Batches</span>
+        <span id="run-all-progress-label" style="font-size:12px;font-weight:400;color:var(--text-muted)">Preparing...</span>
+      </div>
+      <div id="batch-progress-rows">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- ── RUN ALL CTA (shown after run completes) ── -->
+    <div class="results-cta" id="run-all-cta" style="margin-bottom:20px">
+      <div>
+        <div class="results-cta-text" id="run-all-cta-text">All batches complete</div>
+        <div class="results-cta-sub" id="run-all-cta-sub"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline-accent" onclick="goAllResults()">View Consolidated Report &rarr;</button>
+      </div>
+    </div>
+
+    <!-- ── BATCH CARDS ── -->
+    <div class="batch-grid" id="batch-grid"></div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW 2 — BATCH DETAIL
+══════════════════════════════════════════ -->
+<div class="view" id="batch-view">
+  <div class="page-wrap">
+
+    <div class="breadcrumb">
+      <a onclick="goHome()">Home</a>
+      <span>&rsaquo;</span>
+      <span id="bv-title">Batch</span>
+    </div>
+
+    <!-- URL + Run Bar -->
+    <div class="url-run-bar">
+      <label>Target Environment URL</label>
+      <div class="url-run-row">
+        <div class="url-select-wrap">
+          <select class="env-dropdown" id="env-dropdown" onchange="syncEnvUrl()">
+            <option value="https://staging.myapp.com">Staging</option>
+            <option value="https://qa.myapp.com">QA</option>
+            <option value="https://preprod.myapp.com">Pre-prod</option>
+            <option value="custom">Custom...</option>
+          </select>
+          <input class="url-input" id="url-input" type="url" value="https://staging.myapp.com">
+        </div>
+        <button class="btn btn-primary" id="run-btn" onclick="triggerBatchRun()">&#9654; Run Batch</button>
+      </div>
+      <div class="run-status-bar" id="run-status-bar"></div>
+    </div>
+
+    <!-- Folder Cards -->
+    <div class="folder-grid">
+      <div class="folder-card" onclick="toggleFolder('tc-folder')">
+        <div class="folder-icon">&#129514;</div>
+        <div class="folder-name">Testcases</div>
+        <div class="folder-count" id="tc-count">-- test specs</div>
+      </div>
+      <div class="folder-card" onclick="toggleFolder('bl-folder')">
+        <div class="folder-icon">&#128444;&#65039;</div>
+        <div class="folder-name">Baselines</div>
+        <div class="folder-count" id="bl-count">-- baseline images</div>
+      </div>
+    </div>
+
+    <!-- Testcases Folder Contents -->
+    <div class="folder-contents" id="tc-folder">
+      <div class="folder-contents-header">
+        <span>Testcases</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="tc-path-label"></span>
+      </div>
+      <div id="tc-file-list"></div>
+    </div>
+
+    <!-- Baselines Folder Contents -->
+    <div class="folder-contents" id="bl-folder">
+      <div class="folder-contents-header">
+        <span>Baselines</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="bl-path-label"></span>
+      </div>
+      <div id="bl-file-list"></div>
+    </div>
+
+    <!-- View Results CTA -->
+    <div class="results-cta" id="results-cta">
+      <div>
+        <div class="results-cta-text">Run complete &mdash; results ready</div>
+        <div class="results-cta-sub" id="results-cta-sub"></div>
+      </div>
+      <button class="btn btn-outline-accent" onclick="goResults()">View Results &amp; Compare &rarr;</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW 3 — SINGLE BATCH RESULTS
+══════════════════════════════════════════ -->
+<div class="view" id="results-view">
+  <div class="page-wrap">
+
+    <div class="breadcrumb">
+      <a onclick="goHome()">Home</a>
+      <span>&rsaquo;</span>
+      <a onclick="goBatch()"><span id="rv-batch-title">Batch</span></a>
+      <span>&rsaquo;</span>
+      <span>Results</span>
+    </div>
+
+    <div class="results-toolbar">
+      <div class="results-summary">
+        <div class="summary-stat">
+          <div class="summary-num" id="rs-total" style="color:var(--text-primary)">0</div>
+          <div class="summary-label">Total</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="rs-pass" style="color:var(--success)">0</div>
+          <div class="summary-label">Passed</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="rs-fail" style="color:var(--fail)">0</div>
+          <div class="summary-label">Failed</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="rs-dur" style="color:var(--text-secondary)">0s</div>
+          <div class="summary-label">Duration</div>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="showToast('HTML Report download triggered (prototype)')">&#11015; HTML Report</button>
+        <button class="btn btn-secondary btn-sm" onclick="showToast('Excel Report download triggered (prototype)')">&#11015; Excel Report</button>
+      </div>
+    </div>
+
+    <div class="section-label">Export Reports</div>
+    <div class="report-downloads">
+      <div class="report-card" onclick="showToast('HTML Report triggered (prototype)')">
+        <span class="report-icon">&#127760;</span>
+        <div><div class="report-name">HTML Report</div><div class="report-sub">Playwright HTML report</div></div>
+      </div>
+      <div class="report-card" onclick="showToast('Excel Report triggered (prototype)')">
+        <span class="report-icon">&#128202;</span>
+        <div><div class="report-name">Excel Report</div><div class="report-sub">.xlsx with results + diffs</div></div>
+      </div>
+      <div class="report-card" onclick="showToast('JSON Summary triggered (prototype)')">
+        <span class="report-icon">&#128193;</span>
+        <div><div class="report-name">JSON Summary</div><div class="report-sub">Machine-readable output</div></div>
+      </div>
+    </div>
+
+    <div class="section-label">Screenshot Comparison</div>
+    <div class="filter-tabs">
+      <div class="filter-tab active" onclick="filterResults('all', this)">All</div>
+      <div class="filter-tab" onclick="filterResults('pass', this)">Passed</div>
+      <div class="filter-tab" onclick="filterResults('fail', this)">Failed</div>
+      <div class="filter-tab" onclick="filterResults('updated', this)">Updated</div>
+    </div>
+    <div id="comparison-list"></div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW 4 — ALL BATCHES CONSOLIDATED RESULTS (NEW)
+══════════════════════════════════════════ -->
+<div class="view" id="all-results-view">
+  <div class="page-wrap">
+
+    <div class="breadcrumb">
+      <a onclick="goHome()">Home</a>
+      <span>&rsaquo;</span>
+      <span>All Batches Report</span>
+    </div>
+
+    <!-- Summary Bar -->
+    <div class="results-toolbar">
+      <div class="results-summary">
+        <div class="summary-stat">
+          <div class="summary-num" id="ar-total" style="color:var(--text-primary)">0</div>
+          <div class="summary-label">Total Tests</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="ar-pass" style="color:var(--success)">0</div>
+          <div class="summary-label">Passed</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="ar-fail" style="color:var(--fail)">0</div>
+          <div class="summary-label">Failed</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="ar-batches" style="color:var(--accent)">0</div>
+          <div class="summary-label">Batches Run</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-num" id="ar-dur" style="color:var(--text-secondary)">0s</div>
+          <div class="summary-label">Total Duration</div>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="showToast('Consolidated HTML Report triggered (prototype)')">&#11015; Full HTML Report</button>
+        <button class="btn btn-secondary btn-sm" onclick="showToast('Consolidated Excel triggered (prototype)')">&#11015; Excel Report</button>
+      </div>
+    </div>
+
+    <!-- Report Downloads -->
+    <div class="section-label">Export Consolidated Reports</div>
+    <div class="report-downloads">
+      <div class="report-card" onclick="showToast('Full HTML Report triggered (prototype)')">
+        <span class="report-icon">&#127760;</span>
+        <div><div class="report-name">Full HTML Report</div><div class="report-sub">All batches in one report</div></div>
+      </div>
+      <div class="report-card" onclick="showToast('Excel Report triggered (prototype)')">
+        <span class="report-icon">&#128202;</span>
+        <div><div class="report-name">Excel Report</div><div class="report-sub">Batch-wise summary sheet</div></div>
+      </div>
+      <div class="report-card" onclick="showToast('JSON Summary triggered (prototype)')">
+        <span class="report-icon">&#128193;</span>
+        <div><div class="report-name">JSON Summary</div><div class="report-sub">Full machine-readable output</div></div>
+      </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="section-label">Screenshot Comparison — All Batches</div>
+    <div class="filter-tabs">
+      <div class="filter-tab active" onclick="filterAllResults('all', this)">All</div>
+      <div class="filter-tab" onclick="filterAllResults('pass', this)">Passed</div>
+      <div class="filter-tab" onclick="filterAllResults('fail', this)">Failed</div>
+      <div class="filter-tab" onclick="filterAllResults('updated', this)">Updated</div>
+    </div>
+
+    <div id="all-comparison-list"></div>
+
+  </div>
+</div>
+
+<script src="../JS/script.js"></script>
+</body>
+</html>
